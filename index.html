@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nova Voice Assistant</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      font-family: sans-serif;
+      height: 100%;
+      overflow: hidden;
+    }
+    #avatar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+    }
+    video {
+      max-height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="avatar">
+    <video autoplay muted loop>
+      <source src="nova-avatar-loop.mp4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+  </div>
+
+  <script>
+    const synth = window.speechSynthesis;
+    let recognition;
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = synth.getVoices().find(voice => voice.lang.includes('en'));
+      synth.speak(utterance);
+    }
+
+    function startListening() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = async function(event) {
+        const userInput = event.results[0][0].transcript;
+        console.log('User said:', userInput);
+        const response = await fetch("https://af799227-636c-49ba-a52f-f28b07a09a6f-00-2cgqzrf6ipki.kirk.replit.dev/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: userInput })
+        });
+        const data = await response.json();
+console.log("Nova response:", data);  //
+speak(data.reply);
+      };
+
+      recognition.onerror = function(event) {
+        console.error("Speech recognition error:", event.error);
+        setTimeout(startListening, 1000);
+      };
+
+      recognition.onend = function() {
+        setTimeout(startListening, 500);
+      };
+
+      recognition.start();
+    }
+
+    window.onload = function() {
+      setTimeout(() => {
+        speak("Hi there, how can I help today?");
+        startListening();
+      }, 1000);
+
+      let silenceTimer = setTimeout(resetNova, 180000); // 3 minutes
+
+      function resetNova() {
+        speak("I haven't heard anything else from you, I hope I helped. Let me know if I can do anything else for you.");
+        setTimeout(() => location.reload(), 5000);
+      }
+
+      document.addEventListener("click", () => {
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(resetNova, 180000);
+      });
+    };
+  </script>
+</body>
+</html>

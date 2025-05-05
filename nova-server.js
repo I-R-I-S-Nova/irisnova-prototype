@@ -16,7 +16,7 @@ const KEY_PATH = path.join(__dirname, "peaceful-web-456221-c0-2cc64bf58651.json"
 // Your Dialogflow CX project details
 const PROJECT_ID = "peaceful-web-456221-c0";
 const LOCATION = "europe-west2"; // or your region
-const AGENT_ID = "a46d22c9-8e20-4764-9bd3-e2cbb1d54123
+const AGENT_ID = "a46d22c9-8e20-4764-9bd3-e2cbb1d54123";
 const LANGUAGE_CODE = "en";
 
 const client = new SessionsClient({ keyFilename: KEY_PATH });
@@ -59,3 +59,4 @@ app.post("/query", async (req, res) => {
 app.listen(port, () => {
   console.log(`Nova Dialogflow server running on port ${port}`);
 });
+

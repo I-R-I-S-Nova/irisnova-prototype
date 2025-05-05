@@ -9,9 +9,16 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Auth using credentials from env variable
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || '{}');
+} catch (err) {
+  console.error('❌ Failed to parse service account JSON:', err);
+  process.exit(1);
+}
+
 const client = new SessionsClient({
-  credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON),
+  credentials: serviceAccount,
 });
 
 // Dialogflow project config

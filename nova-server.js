@@ -1,25 +1,24 @@
-// Express server for Dialogflow CX integration
 const express = require("express");
 const bodyParser = require("body-parser");
 const { SessionsClient } = require("@google-cloud/dialogflow-cx");
-const path = require("path");
 const cors = require("cors");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// Path to your downloaded service account key file
-const KEY_PATH = path.join(__dirname, "peaceful-web-456221-c0-2cc64bf58651.json");
+// Auth using credentials from env variable
+const client = new SessionsClient({
+  credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON),
+});
 
-// Your Dialogflow CX project details
+// Dialogflow project config
 const PROJECT_ID = "peaceful-web-456221-c0";
-const LOCATION = "europe-west2"; // or your region
+const LOCATION = "europe-west2";
 const AGENT_ID = "a46d22c9-8e20-4764-9bd3-e2cbb1d54123";
 const LANGUAGE_CODE = "en";
-
-const client = new SessionsClient({ keyFilename: KEY_PATH });
 
 app.post("/query", async (req, res) => {
   try {
@@ -51,7 +50,7 @@ app.post("/query", async (req, res) => {
 
     res.json({ reply });
   } catch (error) {
-    console.error("Error with Dialogflow CX request:", error);
+    console.error("Dialogflow CX error:", error);
     res.status(500).json({ reply: "Sorry, I had trouble understanding that." });
   }
 });
@@ -59,4 +58,3 @@ app.post("/query", async (req, res) => {
 app.listen(port, () => {
   console.log(`Nova Dialogflow server running on port ${port}`);
 });
-

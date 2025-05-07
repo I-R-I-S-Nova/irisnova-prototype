@@ -2,6 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { SessionsClient } = require("@google-cloud/dialogflow-cx");
 const cors = require("cors");
+const fs = require("fs");
 
 const app = express();
 const port = 10000;
@@ -9,19 +10,17 @@ const port = 10000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// 🔐 Improved environment variable parsing with clearer error messages
-const rawCreds = process.env.GOOGLE_CREDS_FIXED;
-
-if (!rawCreds) {
-  console.error("❌ Missing GOOGLE_CREDS_FIXED environment variable.");
-  process.exit(1);
-}
+// ✅ Load credentials from local file (dev) or secret mount (Render)
+const credsPath = process.env.RENDER
+  ? "/etc/secrets/google-creds.json"
+  : "./google-creds.json";
 
 let serviceAccount;
 try {
+  const rawCreds = fs.readFileSync(credsPath, "utf8");
   serviceAccount = JSON.parse(rawCreds);
 } catch (err) {
-  console.error("❌ Failed to parse service account JSON:", err.message);
+  console.error("❌ Failed to load or parse service account JSON:", err.message);
   process.exit(1);
 }
 
@@ -67,9 +66,7 @@ app.post("/query", async (req, res) => {
     res.json({ reply });
   } catch (error) {
     console.error("❌ Dialogflow CX error:", JSON.stringify(error, null, 2));
-    res
-      .status(500)
-      .json({ reply: "Sorry, I had trouble understanding that." });
+    res.status(500).json({ reply: "Sorry, I had trouble understanding that." });
   }
 });
 

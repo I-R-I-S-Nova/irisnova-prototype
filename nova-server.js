@@ -49,11 +49,11 @@ app.post("/query", async (req, res) => {
       },
     };
 
-    const [response] = await client.detectIntent(request);
-    const reply = response.queryResult.responseMessages
-      .map((msg) => msg.text?.text?.[0])
-      .filter(Boolean)
-      .join(" ");
+  const [response] = await client.detectIntent(request);
+const reply = response.queryResult.responseMessages
+  .map(msg => msg.text?.text?.[0])
+  .filter(Boolean)
+  .join(' ') || "Sorry, I had trouble understanding that.";
 
     res.json({ reply });
   } catch (error) {

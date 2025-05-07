@@ -11,7 +11,7 @@ app.use(bodyParser.json());
 
 let serviceAccount;
 try {
-  serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || '{}');
+  serviceAccount = JSON.parse(process.env.GOOGLE_CREDS_FIXED || '{}');
 } catch (err) {
   console.error('❌ Failed to parse service account JSON:', err);
   process.exit(1);

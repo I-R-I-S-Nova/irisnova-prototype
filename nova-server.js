@@ -32,12 +32,12 @@ app.post("/query", async (req, res) => {
     const userQuery = req.body.query;
     const sessionId = Math.random().toString(36).substring(7);
 
-    const sessionPath = client.projectLocationAgentSessionPath(
-      PROJECT_ID,
-      LOCATION,
-      AGENT_ID,
-      sessionId
-    );
+  const sessionPath = client.projectLocationAgentSessionPath(
+  PROJECT_ID,
+  LOCATION,
+  AGENT_ID,
+  sessionId
+);
 
     const request = {
       session: sessionPath,

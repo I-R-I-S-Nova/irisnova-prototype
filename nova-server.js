@@ -57,7 +57,7 @@ const reply = response.queryResult.responseMessages
 
     res.json({ reply });
   } catch (error) {
-    console.error("Dialogflow CX error:", error);
+    console.error("❌ Dialogflow CX error:", JSON.stringify(error, null, 2));
     res.status(500).json({ reply: "Sorry, I had trouble understanding that." });
   }
 });

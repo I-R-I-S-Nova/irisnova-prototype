@@ -9,11 +9,19 @@ const port = 10000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// 🔐 Improved environment variable parsing with clearer error messages
+const rawCreds = process.env.GOOGLE_CREDS_FIXED;
+
+if (!rawCreds) {
+  console.error("❌ Missing GOOGLE_CREDS_FIXED environment variable.");
+  process.exit(1);
+}
+
 let serviceAccount;
 try {
-  serviceAccount = JSON.parse(process.env.GOOGLE_CREDS_FIXED || '{}');
+  serviceAccount = JSON.parse(rawCreds);
 } catch (err) {
-  console.error('❌ Failed to parse service account JSON:', err);
+  console.error("❌ Failed to parse service account JSON:", err.message);
   process.exit(1);
 }
 
@@ -32,12 +40,12 @@ app.post("/query", async (req, res) => {
     const userQuery = req.body.query;
     const sessionId = Math.random().toString(36).substring(7);
 
-  const sessionPath = client.projectLocationAgentSessionPath(
-  PROJECT_ID,
-  LOCATION,
-  AGENT_ID,
-  sessionId
-);
+    const sessionPath = client.projectLocationAgentSessionPath(
+      PROJECT_ID,
+      LOCATION,
+      AGENT_ID,
+      sessionId
+    );
 
     const request = {
       session: sessionPath,
@@ -49,16 +57,19 @@ app.post("/query", async (req, res) => {
       },
     };
 
-  const [response] = await client.detectIntent(request);
-const reply = response.queryResult.responseMessages
-  .map(msg => msg.text?.text?.[0])
-  .filter(Boolean)
-  .join(' ') || "Sorry, I had trouble understanding that.";
+    const [response] = await client.detectIntent(request);
+    const reply =
+      response.queryResult.responseMessages
+        .map((msg) => msg.text?.text?.[0])
+        .filter(Boolean)
+        .join(" ") || "Sorry, I had trouble understanding that.";
 
     res.json({ reply });
   } catch (error) {
     console.error("❌ Dialogflow CX error:", JSON.stringify(error, null, 2));
-    res.status(500).json({ reply: "Sorry, I had trouble understanding that." });
+    res
+      .status(500)
+      .json({ reply: "Sorry, I had trouble understanding that." });
   }
 });
 

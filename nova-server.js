@@ -1,5 +1,4 @@
 const express = require("express");
-const bodyParser = require("body-parser");
 const { SessionsClient } = require("@google-cloud/dialogflow-cx");
 const cors = require("cors");
 const fs = require("fs");

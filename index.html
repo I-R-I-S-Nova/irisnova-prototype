@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nova Voice Assistant</title>
+  <title>Iris Voice Assistant</title>
   <style>
     html, body {
       margin: 0;
@@ -57,7 +57,6 @@
     </video>
     <div id="status">Initializing...</div>
   </div>
-
   <script>
     const synth = window.speechSynthesis;
     let recognition;
@@ -70,43 +69,75 @@
     
     // Set status with visual feedback
     function setStatus(message, state = '') {
+      console.log(`Status: ${message} (${state})`);
       statusEl.textContent = message;
       avatarEl.className = state;
     }
-
     // Ensure voices are loaded
     function loadVoices() {
       return new Promise((resolve) => {
         voices = synth.getVoices();
         if (voices.length > 0) {
+          console.log(`Loaded ${voices.length} voices`);
           resolve(voices);
         } else {
           synth.onvoiceschanged = () => {
             voices = synth.getVoices();
+            console.log(`Loaded ${voices.length} voices after change`);
             resolve(voices);
           };
+          
+          // Safety timeout
+          setTimeout(() => {
+            if (voices.length === 0) {
+              console.warn("No voices loaded, using default");
+              resolve([]);
+            }
+          }, 1000);
         }
       });
     }
-
     // Speak text with error handling
     async function speak(text) {
       try {
+        console.log(`Speaking: "${text}"`);
+        
+        // Cancel any ongoing speech
+        if (synth.speaking) {
+          console.log("Cancelling previous speech");
+          synth.cancel();
+        }
+        
         // Wait for voices to load if they haven't already
         if (voices.length === 0) {
           await loadVoices();
         }
         
-        setStatus('Nova is speaking...', 'speaking');
+        setStatus('Iris is speaking...', 'speaking');
         
         return new Promise((resolve) => {
           const utterance = new SpeechSynthesisUtterance(text);
+          
           // Try to find an English female voice, fall back to any English voice
-          utterance.voice = voices.find(voice => voice.name.includes('Female') && voice.lang.includes('en')) || 
-                           voices.find(voice => voice.lang.includes('en')) ||
-                           voices[0];
+          const englishFemaleVoice = voices.find(voice => 
+            voice.name.includes('Female') && voice.lang.includes('en')
+          );
+          const englishVoice = voices.find(voice => voice.lang.includes('en'));
+          
+          utterance.voice = englishFemaleVoice || englishVoice || (voices.length > 0 ? voices[0] : null);
+          
+          if (utterance.voice) {
+            console.log(`Using voice: ${utterance.voice.name}`);
+          } else {
+            console.warn("No voice selected, using browser default");
+          }
+          
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          utterance.volume = 1.0;
           
           utterance.onend = () => {
+            console.log("Speech finished");
             setStatus('Listening...', 'listening');
             resolve();
           };
@@ -118,13 +149,21 @@
           };
           
           synth.speak(utterance);
+          
+          // Safety timeout in case onend doesn't fire
+          setTimeout(() => {
+            if (synth.speaking) {
+              console.warn("Speech didn't finish naturally, forcing resolve");
+              setStatus('Listening...', 'listening');
+              resolve();
+            }
+          }, text.length * 100); // Rough estimate: 100ms per character
         });
       } catch (error) {
         console.error('Speak error:', error);
         setStatus('Error speaking', 'error');
       }
     }
-
     // Check server health
     async function checkServerHealth() {
       try {
@@ -141,7 +180,6 @@
         return false;
       }
     }
-
     // Initialize speech recognition
     function startListening() {
       try {
@@ -150,11 +188,9 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = 'en-US';
-
         recognition.onstart = function() {
           setStatus('Listening...', 'listening');
         };
-
         recognition.onresult = async function(event) {
           try {
             const userInput = event.results[0][0].transcript;
@@ -175,8 +211,9 @@
             const data = await response.json();
             console.log("Nova response:", data);
             
-            if (data.reply) {
-              await speak(data.reply);
+            if (data && data.reply) {
+              // Force a slight delay to ensure previous utterances are canceled
+              setTimeout(() => speak(data.reply), 100);
             } else {
               throw new Error('Empty response from server');
             }
@@ -188,27 +225,26 @@
             }, 1000);
           }
         };
-
         recognition.onerror = function(event) {
           console.error("Speech recognition error:", event.error);
           setStatus(`Recognition error: ${event.error}`, 'error');
           setTimeout(startListening, 1000);
         };
-
         recognition.onend = function() {
+          console.log("Recognition ended, restarting soon");
           setTimeout(startListening, 500);
         };
-
         recognition.start();
+        console.log("Started listening");
       } catch (error) {
         console.error("Failed to start speech recognition:", error);
         setStatus('Speech recognition not available', 'error');
       }
     }
-
     // Initialize the application
     async function initApp() {
       try {
+        console.log("Initializing app...");
         setStatus('Loading voices...', '');
         await loadVoices();
         
@@ -240,7 +276,6 @@
         setStatus('Failed to initialize', 'error');
       }
     }
-
     window.onload = initApp;
   </script>
 </body>

@@ -15,14 +15,7 @@ const credsPath = process.env.RENDER
   ? "/etc/secrets/google-creds.json"
   : "./google-creds.json";
 
-let serviceAccount;
-try {
-  const rawCreds = fs.readFileSync(credsPath, "utf8");
-  serviceAccount = JSON.parse(rawCreds);
-} catch (err) {
-  console.error("❌ Failed to load or parse service account JSON:", err.message);
-  process.exit(1);
-}
+const express = require("express");
 
 const client = new SessionsClient({
   credentials: serviceAccount,

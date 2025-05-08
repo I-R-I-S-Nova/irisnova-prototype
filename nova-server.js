@@ -19,15 +19,17 @@ try {
   console.error("❌ Error loading credentials:", error.message);
   process.exit(1);
 }
-// Initialize Dialogflow client
-const client = new SessionsClient({
-  credentials: serviceAccount,
-});
 // Dialogflow project config
 const PROJECT_ID = "peaceful-web-456221-c0";
 const LOCATION = "europe-west2";
 const AGENT_ID = "a46d22c9-8e20-4764-9bd3-e2cbb1d54123";
 const LANGUAGE_CODE = "en";
+// Initialize Dialogflow client with region-specific endpoint
+const client = new SessionsClient({
+  apiEndpoint: `${LOCATION}-dialogflow.googleapis.com`,
+  credentials: serviceAccount,
+});
+console.log(`Using Dialogflow CX API endpoint: ${LOCATION}-dialogflow.googleapis.com`);
 // Health check endpoint
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Nova Dialogflow server is running" });
@@ -42,14 +44,18 @@ app.post("/query", async (req, res) => {
       });
     }
     
+    console.log(`Processing query: "${userQuery}"`);
+    
     const sessionId = Math.random().toString(36).substring(7);
-    console.log(`Processing query: "${userQuery}" (Session: ${sessionId})`);
+    console.log(`Session ID: ${sessionId}`);
+    // Create the session path
     const sessionPath = client.projectLocationAgentSessionPath(
       PROJECT_ID,
       LOCATION,
       AGENT_ID,
       sessionId
     );
+    
     const request = {
       session: sessionPath,
       queryInput: {
@@ -59,7 +65,10 @@ app.post("/query", async (req, res) => {
         languageCode: LANGUAGE_CODE,
       },
     };
+    
+    console.log("Sending request to Dialogflow...");
     const [response] = await client.detectIntent(request);
+    console.log("Received response from Dialogflow");
     
     const reply =
       response.queryResult.responseMessages
@@ -70,7 +79,14 @@ app.post("/query", async (req, res) => {
     res.json({ reply });
   } catch (error) {
     console.error("❌ Dialogflow CX error:", error.message);
-    res.status(500).json({ reply: "Sorry, I had trouble understanding that." });
+    if (error.details) {
+      console.error("Error details:", error.details);
+    }
+    
+    res.status(500).json({ 
+      error: error.message,
+      reply: "Sorry, I had trouble understanding that." 
+    });
   }
 });
 app.listen(port, () => {

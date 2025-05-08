@@ -14,7 +14,6 @@ const credsPath = process.env.RENDER
   ? "/etc/secrets/google-creds.json"
   : "./google-creds.json";
 
-const express = require("express");
 
 const client = new SessionsClient({
   credentials: serviceAccount,

@@ -15,9 +15,9 @@ app.use(bodyParser.json());
 // Load credentials from file or environment
 let serviceAccount;
 try {
-  const credsPath = process.env.RENDER
-    ? "/etc/secrets/google-creds.json"
-    : "./google-creds.json";
+ const credsPath = process.env.RENDER
+  ? process.env.GOOGLE_CREDS_PATH || "google-creds.json"
+  : "./google-creds.json";
   
   serviceAccount = JSON.parse(fs.readFileSync(credsPath));
   console.log("✅ Successfully loaded Google credentials");

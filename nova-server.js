@@ -14,7 +14,6 @@ const credsPath = process.env.RENDER
   ? "/etc/secrets/google-creds.json"
   : "./google-creds.json";
 
-
 const client = new SessionsClient({
   credentials: serviceAccount,
 });

@@ -2,41 +2,24 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { SessionsClient } = require("@google-cloud/dialogflow-cx");
 const cors = require("cors");
-const fs = require("fs");
 const app = express();
-const port = process.env.PORT || 10000; // Use Render's port or default
-// Enable CORS for your Netlify domain
-app.use(cors({
-  origin: '*', // In production, change to your Netlify domain
-  methods: ['GET', 'POST'],
-  credentials: true
-}));
+const port = process.env.PORT || 10000;
+app.use(cors());
 app.use(bodyParser.json());
-// Load credentials from file or environment
+// Load credentials from environment
 let serviceAccount;
 try {
- const credsPath = process.env.RENDER
-  ? process.env.GOOGLE_CREDS_PATH || "google-creds.json"
-  : "./google-creds.json";
-  
-  serviceAccount = JSON.parse(fs.readFileSync(credsPath));
-  console.log("✅ Successfully loaded Google credentials");
+  if (process.env.GOOGLE_CREDENTIALS) {
+    serviceAccount = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    console.log("✅ Successfully loaded Google credentials from environment");
+  } else {
+    throw new Error("GOOGLE_CREDENTIALS environment variable not found");
+  }
 } catch (error) {
   console.error("❌ Error loading credentials:", error.message);
-  // Don't exit - try environment variable fallback
-  try {
-    if (process.env.GOOGLE_CREDENTIALS) {
-      serviceAccount = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-      console.log("✅ Successfully loaded Google credentials from environment");
-    } else {
-      throw new Error("No credentials found in environment");
-    }
-  } catch (envError) {
-    console.error("❌ Fatal: No valid credentials available:", envError.message);
-    process.exit(1);
-  }
+  process.exit(1);
 }
-// Create SessionsClient with credentials
+// Initialize Dialogflow client
 const client = new SessionsClient({
   credentials: serviceAccount,
 });
@@ -49,7 +32,6 @@ const LANGUAGE_CODE = "en";
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Nova Dialogflow server is running" });
 });
-// Main query endpoint
 app.post("/query", async (req, res) => {
   try {
     const userQuery = req.body.query;
@@ -79,7 +61,6 @@ app.post("/query", async (req, res) => {
     };
     const [response] = await client.detectIntent(request);
     
-    // Extract text responses from response messages
     const reply =
       response.queryResult.responseMessages
         .map((msg) => msg.text?.text?.[0])
@@ -89,11 +70,7 @@ app.post("/query", async (req, res) => {
     res.json({ reply });
   } catch (error) {
     console.error("❌ Dialogflow CX error:", error.message);
-    console.error(error.stack);
-    res.status(500).json({ 
-      error: error.message,
-      reply: "Sorry, I had trouble understanding that." 
-    });
+    res.status(500).json({ reply: "Sorry, I had trouble understanding that." });
   }
 });
 app.listen(port, () => {

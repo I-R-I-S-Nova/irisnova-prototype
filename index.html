@@ -50,6 +50,10 @@
   </style>
 </head>
 <body>
+  <!-- Add the test button here -->
+  <button id="testSpeech" style="position: absolute; top: 10px; right: 10px; z-index: 1000; padding: 10px;">
+    Test Speech
+  </button>
   <div id="avatar">
     <video autoplay muted loop id="avatarVideo">
       <source src="nova-avatar-loop.mp4" type="video/mp4" />
@@ -63,9 +67,16 @@
     let voices = [];
     const statusEl = document.getElementById('status');
     const avatarEl = document.getElementById('avatar');
-    
-    // Server URL - change to your actual endpoint
+
+        // Server URL - change to your actual endpoint
     const SERVER_URL = "https://irisnova-prototype.onrender.com";
+    
+    // Add this test button handler
+document.getElementById('testSpeech').addEventListener('click', function() {
+  console.log("Test speech button clicked");
+  const utterance = new SpeechSynthesisUtterance("This is a test of the speech synthesis system.");
+  window.speechSynthesis.speak(utterance);
+    });
     
     // Set status with visual feedback
     function setStatus(message, state = '') {

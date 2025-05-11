@@ -101,6 +101,49 @@
     // Server URL - change to your actual endpoint
     const SERVER_URL = "https://irisnova-prototype.onrender.com";
     
+    // Function to speak Dialogflow responses
+    function speakDialogflowResponse(responseObject) {
+      try {
+        if (responseObject && responseObject.reply) {
+          console.log("Speaking response:", responseObject.reply);
+          
+          // Cancel any ongoing speech
+          window.speechSynthesis.cancel();
+          
+          const utterance = new SpeechSynthesisUtterance(responseObject.reply);
+          
+          // Try to use a female voice if available
+          const voices = window.speechSynthesis.getVoices();
+          const femaleVoice = voices.find(v => 
+            (v.name.toLowerCase().includes('female') || 
+             v.name.toLowerCase().includes('samantha')) && 
+            v.lang.toLowerCase().includes('en')
+          );
+          
+          if (femaleVoice) {
+            console.log("Using voice:", femaleVoice.name);
+            utterance.voice = femaleVoice;
+          }
+          
+          // Adjust for more feminine sound
+          utterance.pitch = 1.2;
+          utterance.rate = 1.0;
+          
+          // Start speaking
+          window.speechSynthesis.speak(utterance);
+          return true;
+        } else {
+          console.error("Invalid response object:", responseObject);
+          return false;
+        }
+      } catch (error) {
+        console.error("Speech synthesis error:", error);
+        return false;
+      }
+    } 
+    
+    window.speakDialogflowResponse = speakDialogflowResponse;
+    
     // DOM Elements
     const statusEl = document.getElementById('status');
     const avatarEl = document.getElementById('avatar');
@@ -283,7 +326,15 @@
         if (data && data.reply) {
           // Update transcript and speak the response
           transcriptEl.textContent += `\nIris: ${data.reply}`;
-          await speak(data.reply);
+          
+          // Try both speech methods for better reliability
+          speakDialogflowResponse(data);
+          
+          // Set status to speaking
+          setStatus('Iris is speaking...', 'speaking');
+          
+          // Wait a reasonable time based on text length before continuing
+          await new Promise(resolve => setTimeout(resolve, data.reply.length * 90 + 1000));
         } else {
           throw new Error('Empty or invalid response from server');
         }
@@ -320,7 +371,7 @@
             setStatus('Listening...', 'listening');
           };
           
-          recognition.onresult = function(event) {
+          recognition.onresult = async function(event) {
             recognition.recognizing = false;
             const userInput = event.results[0][0].transcript;
             debug(`Recognized: "${userInput}" (confidence: ${event.results[0][0].confidence.toFixed(2)})`);
@@ -391,7 +442,13 @@
         
         // Welcome message
         debug("Speaking welcome message...");
-        await speak("Hi there, I'm Iris. How can I help you today?");
+        
+        // Use the speakDialogflowResponse for the welcome message
+        speakDialogflowResponse({reply: "Hi there, I'm Iris. How can I help you today?"});
+        setStatus('Iris is speaking...', 'speaking');
+        
+        // Wait a moment for the speech to complete
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // Start listening
         debug("Starting speech recognition...");
@@ -417,7 +474,7 @@
       
       // Press 'T' to test speech
       if (e.key === 't' || e.key === 'T') {
-        speak("This is a test of Iris's voice system. Can you hear me clearly?");
+        speakDialogflowResponse({reply: "This is a test of Iris's voice system. Can you hear me clearly?"});
       }
       
       // Press 'R' to restart listening
@@ -431,7 +488,8 @@
       speak: speak,
       startListening: startListening,
       processInput: processInput,
-      init: initApp
+      init: initApp,
+      speakDialogflow: speakDialogflowResponse
     };
   </script>
 </body>

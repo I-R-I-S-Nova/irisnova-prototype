@@ -84,6 +84,22 @@
       max-width: 300px;
       display: none;
     }
+    #manualInput {
+      position: absolute;
+      bottom: 100px;
+      left: 0;
+      right: 0;
+      margin: 0 auto;
+      width: 80%;
+      max-width: 500px;
+      padding: 10px;
+      background-color: rgba(0,0,0,0.7);
+      border: 1px solid #444;
+      border-radius: 5px;
+      font-size: 16px;
+      color: white;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -95,146 +111,16 @@
     <div id="status">Press Start to activate Iris</div>
     <div id="transcript"></div>
     <button id="startButton">Start Iris</button>
+    <input type="text" id="manualInput" placeholder="Type your message and press Enter..." />
     <div id="debugPanel"></div>
   </div>
+  
   <script>
-    // Check for speech synthesis support
-    console.log("Speech synthesis available:", 'speechSynthesis' in window);
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // Reset any existing speech
-      console.log("Speech synthesis reset");
-    }
+    // Session ID for Dialogflow
+    const sessionId = Date.now().toString();
     
-    // Server URL - change to your actual endpoint
+    // Server URL
     const SERVER_URL = "https://irisnova-prototype.onrender.com";
-    
-    // Function to speak Dialogflow responses
-    function speakDialogflowResponse(responseObject) {
-      try {
-        if (responseObject && responseObject.reply) {
-          console.log("Speaking response:", responseObject.reply);
-          
-          // Cancel any ongoing speech
-          window.speechSynthesis.cancel();
-          
-          const utterance = new SpeechSynthesisUtterance(responseObject.reply);
-          
-          // Try to use a female voice if available
-          const voices = window.speechSynthesis.getVoices();
-          const femaleVoice = voices.find(v => 
-            (v.name.toLowerCase().includes('female') || 
-             v.name.toLowerCase().includes('samantha')) && 
-            v.lang.toLowerCase().includes('en')
-          );
-          
-          if (femaleVoice) {
-            console.log("Using voice:", femaleVoice.name);
-            utterance.voice = femaleVoice;
-          }
-          
-          // Start speaking
-          window.speechSynthesis.speak(utterance);
-          return true;
-        } else {
-          console.error("Invalid response object:", responseObject);
-          return false;
-        }
-      } catch (error) {
-        console.error("Speech synthesis error:", error);
-        return false;
-      }
-    }
-    
-    // Direct speech function that uses the absolutely simplest approach
-    function basicSpeak(text) {
-      try {
-        console.log("BASIC SPEAK:", text);
-        
-        // Create utterance with minimal options
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Log when speech starts and ends
-        utterance.onstart = () => console.log("BASIC SPEAK STARTED");
-        utterance.onend = () => console.log("BASIC SPEAK ENDED");
-        utterance.onerror = (e) => console.log("BASIC SPEAK ERROR:", e.error);
-        
-        // Speak immediately
-        speechSynthesis.cancel(); // Cancel any existing speech
-        speechSynthesis.speak(utterance);
-        
-        return true;
-      } catch (e) {
-        console.error("BASIC SPEAK FAILED:", e);
-        return false;
-      }
-    }
-    
-    // Test speech function for console testing
-    function testSpeech() {
-      console.log("TEST SPEECH ACTIVATED");
-      
-      try {
-        const text = "This is a basic speech test. Can you hear me now?";
-        console.log("Speaking:", text);
-        
-        // Create utterance with minimal options
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Log when speech starts and ends
-        utterance.onstart = () => console.log("SPEECH STARTED");
-        utterance.onend = () => console.log("SPEECH ENDED");
-        utterance.onerror = (e) => console.log("SPEECH ERROR:", e.error);
-        
-        // Speak immediately
-        window.speechSynthesis.cancel(); // Cancel any existing speech
-        window.speechSynthesis.speak(utterance);
-        
-        console.log("Speech initiated");
-        return true;
-      } catch (e) {
-        console.error("SPEECH TEST FAILED:", e);
-        return false;
-      }
-    }
-    
-    // Alternative speech synthesis using audio element
-    function audioSpeak(text) {
-      try {
-        console.log("AUDIO SPEAK:", text);
-        
-        // Create audio element
-        const audio = new Audio();
-        
-        // Encode text for URL (limited to short phrases due to URL length limits)
-        const encodedText = encodeURIComponent(text.substring(0, 100));
-        
-        // Set source to text-to-speech service
-        audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=${encodedText}`;
-        
-        // Add error handling
-        audio.onerror = (e) => {
-          console.error("Audio speak error:", e);
-        };
-        
-        // Play the audio
-        audio.play().then(() => {
-          console.log("Audio playback started");
-        }).catch(e => {
-          console.error("Audio playback error:", e);
-        });
-        
-        return true;
-      } catch (e) {
-        console.error("AUDIO SPEAK FAILED:", e);
-        return false;
-      }
-    }
-    
-    // Make these available globally
-    window.speakDialogflowResponse = speakDialogflowResponse;
-    window.basicSpeak = basicSpeak;
-    window.testSpeech = testSpeech;
-    window.audioSpeak = audioSpeak;
     
     // DOM Elements
     const statusEl = document.getElementById('status');
@@ -242,12 +128,10 @@
     const startButton = document.getElementById('startButton');
     const transcriptEl = document.getElementById('transcript');
     const debugPanel = document.getElementById('debugPanel');
+    const manualInput = document.getElementById('manualInput');
     
     // Speech services
-    const synth = window.speechSynthesis;
     let recognition = null;
-    let voices = [];
-    let selectedVoice = null;
     let isListening = false;
     let initialized = false;
     
@@ -271,121 +155,58 @@
       avatarEl.className = state;
     }
     
-    // Initialize voices
-    function initVoices() {
-      return new Promise((resolve) => {
-        function loadVoices() {
-          voices = synth.getVoices();
-          debug(`Loaded ${voices.length} voices`);
-          
-          // Find female English voice
-          selectedVoice = voices.find(v => 
-            v.name.toLowerCase().includes('female') && 
-            v.lang.toLowerCase().includes('en')
-          );
-          
-          // Try common female names
-          if (!selectedVoice) {
-            const femaleNames = ['samantha', 'victoria', 'karen', 'lisa', 'catherine', 'elizabeth'];
-            selectedVoice = voices.find(v => 
-              femaleNames.some(name => v.name.toLowerCase().includes(name)) && 
-              v.lang.toLowerCase().includes('en')
-            );
-          }
-          
-          // Fallback to any English voice
-          if (!selectedVoice) {
-            selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
-          }
-          
-          if (selectedVoice) {
-            debug(`Selected voice: ${selectedVoice.name} (${selectedVoice.lang})`);
-          } else {
-            debug("No suitable voice found, using default");
-          }
-          
-          resolve(selectedVoice);
+    // Simple speech function
+    function speak(text) {
+      try {
+        debug(`Speaking: "${text}"`);
+        
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+        
+        // Create utterance
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Get voices
+        const voices = window.speechSynthesis.getVoices();
+        debug(`Available voices: ${voices.length}`);
+        
+        // Try to find a female voice
+        const femaleVoice = voices.find(v => 
+          (v.name.toLowerCase().includes('female') || 
+           v.name.toLowerCase().includes('samantha')) && 
+          v.lang.includes('en')
+        );
+        
+        if (femaleVoice) {
+          debug(`Using voice: ${femaleVoice.name}`);
+          utterance.voice = femaleVoice;
+        } else {
+          debug("No female voice found, using default");
         }
         
-        // If voices are already loaded
-        if (synth.getVoices().length > 0) {
-          loadVoices();
-        } else {
-          // Wait for voices to load
-          synth.onvoiceschanged = loadVoices;
+        // Set status
+        setStatus('Iris is speaking...', 'speaking');
+        
+        // Speak
+        window.speechSynthesis.speak(utterance);
+        
+        // Set up an event for when speech ends
+        utterance.onend = function() {
+          debug("Speech ended");
+          setStatus('Listening...', 'listening');
           
-          // Fallback in case onvoiceschanged doesn't fire
-          setTimeout(() => {
-            if (!selectedVoice && synth.getVoices().length > 0) {
-              loadVoices();
-            } else if (!selectedVoice) {
-              debug("No voices loaded within timeout");
-              resolve(null);
-            }
-          }, 1000);
-        }
-      });
-    }
-    
-    // Speak text with better error handling
-    function speak(text) {
-      return new Promise((resolve) => {
-        try {
-          debug(`Speaking: "${text}"`);
-          
-          // Cancel any ongoing speech
-          if (synth.speaking) {
-            debug("Cancelling previous speech");
-            synth.cancel();
+          // Restart listening if we should be listening
+          if (isListening && (!recognition || !recognition.recognizing)) {
+            startListening();
           }
-          
-          const utterance = new SpeechSynthesisUtterance(text);
-          
-          // Use selected voice if available
-          if (selectedVoice) {
-            utterance.voice = selectedVoice;
-          }
-          
-          // Adjust for more feminine sound
-          utterance.pitch = 1.2;
-          utterance.rate = 1.0;
-          
-          // Set up event handlers
-          utterance.onstart = () => {
-            debug("Speech started");
-          };
-          
-          utterance.onend = () => {
-            debug("Speech ended naturally");
-            setStatus('Listening...', 'listening');
-            resolve();
-          };
-          
-          utterance.onerror = (err) => {
-            debug(`Speech error: ${err.error}`);
-            setStatus('Speech error', 'error');
-            resolve();
-          };
-          
-          // Start speaking
-          setStatus('Iris is speaking...', 'speaking');
-          synth.speak(utterance);
-          
-          // Safety timeout in case onend doesn't fire
-          const timeout = text.length * 100 + 3000; // ~100ms per character + 3s base
-          setTimeout(() => {
-            if (synth.speaking) {
-              debug(`Speech timeout after ${timeout}ms`);
-              setStatus('Listening...', 'listening');
-              resolve();
-            }
-          }, timeout);
-        } catch (error) {
-          debug(`Speak error: ${error.message}`);
-          setStatus('Speech system error', 'error');
-          resolve();
-        }
-      });
+        };
+        
+        return true;
+      } catch (error) {
+        debug(`Speak error: ${error.message}`);
+        setStatus('Listening...', 'listening');
+        return false;
+      }
     }
     
     // Process user input with Dialogflow
@@ -395,14 +216,14 @@
         transcriptEl.textContent = `You: ${userInput}`;
         setStatus('Processing...', 'processing');
         
-        // Log the input
-        debug(`Processing input: "${userInput}"`);
-        
-        // Send to server
+        // Send to server with session ID
         const response = await fetch(`${SERVER_URL}/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: userInput })
+          body: JSON.stringify({ 
+            query: userInput,
+            sessionId: sessionId  // Send session ID to maintain conversation
+          })
         });
         
         // Check for errors
@@ -419,61 +240,15 @@
           // Update transcript
           transcriptEl.textContent += `\nIris: ${data.reply}`;
           
-          // Try all possible approaches one after another
-          debug("Attempting speech with multiple methods");
-          
-          try {
-            // Method 1: Basic speak
-            debug("Trying method 1: basicSpeak");
-            basicSpeak(data.reply);
-          } catch (e) {
-            debug(`Method 1 failed: ${e.message}`);
-          }
-          
-          try {
-            // Method 2: Original DialogflowResponse
-            debug("Trying method 2: speakDialogflowResponse");
-            speakDialogflowResponse(data);
-          } catch (e) {
-            debug(`Method 2 failed: ${e.message}`);
-          }
-          
-          try {
-            // Method 3: Audio method
-            debug("Trying method 3: audioSpeak");
-            audioSpeak(data.reply);
-          } catch (e) {
-            debug(`Method 3 failed: ${e.message}`);
-          }
-          
-          // Set status
-          setStatus('Iris is speaking...', 'speaking');
-          
-          // Wait a reasonable time
-          const waitTime = data.reply.length * 90 + 1000;
-          debug(`Waiting ${waitTime}ms for speech to complete`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          
-          // Set status back to listening
-          setStatus('Listening...', 'listening');
+          // Try to speak
+          speak(data.reply);
         } else {
           throw new Error('Empty or invalid response from server');
         }
       } catch (error) {
         debug(`Process error: ${error.message}`);
         setStatus('Error processing request', 'error');
-        
-        // Try to speak the error message
-        try {
-          basicSpeak("I'm sorry, I encountered an error. Please try again.");
-        } catch (e) {
-          debug(`Error speaking error message: ${e.message}`);
-        }
-      } finally {
-        // Restart listening if needed
-        if (isListening && !recognition.recognizing) {
-          startListening();
-        }
+        speak("I'm sorry, I encountered an error. Please try again.");
       }
     }
     
@@ -493,12 +268,11 @@
           recognition.lang = 'en-US';
           
           recognition.onstart = function() {
-            debug("Recognition started");
             recognition.recognizing = true;
             setStatus('Listening...', 'listening');
           };
           
-          recognition.onresult = async function(event) {
+          recognition.onresult = function(event) {
             recognition.recognizing = false;
             const userInput = event.results[0][0].transcript;
             debug(`Recognized: "${userInput}" (confidence: ${event.results[0][0].confidence.toFixed(2)})`);
@@ -510,11 +284,10 @@
             debug(`Recognition error: ${event.error}`);
             
             if (event.error === 'no-speech') {
-              debug("No speech detected, restarting...");
               setStatus('Waiting for speech...', 'listening');
               setTimeout(startListening, 1000);
             } else if (event.error === 'aborted') {
-              debug("Recognition aborted");
+              // Do nothing
             } else {
               setStatus(`Recognition error: ${event.error}`, 'error');
               setTimeout(startListening, 3000);
@@ -553,52 +326,52 @@
     }
     
     // Initialize the app
-    async function initApp() {
+    function initApp() {
       try {
         if (initialized) return;
         
-        // Hide start button
+        // Hide start button and show manual input
         startButton.style.display = 'none';
+        manualInput.style.display = 'block';
         
         // Set initial status
         setStatus('Initializing...', '');
         
-        // Initialize voices
-        debug("Initializing voices...");
-        await initVoices();
+        // Show debug panel
+        debugPanel.style.display = 'block';
+        debug("App initialized");
         
-        // Welcome message
-        debug("Speaking welcome message...");
-        
-        // Try multiple speech methods for welcome message
-        try {
-          basicSpeak("Hi there, I'm Iris. How can I help you today?");
-        } catch (e) {
-          debug(`Basic speak welcome failed: ${e.message}`);
-        }
-        
-        try {
-          speakDialogflowResponse({reply: "Hi there, I'm Iris. How can I help you today?"});
-        } catch (e) {
-          debug(`Dialogflow speak welcome failed: ${e.message}`);
-        }
-        
-        setStatus('Iris is speaking...', 'speaking');
-        
-        // Wait a moment for the speech to complete
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Start listening
-        debug("Starting speech recognition...");
-        isListening = true;
-        initialized = true;
-        startListening();
+        // Welcome message with delay to ensure voices are loaded
+        setTimeout(() => {
+          // Speak welcome message
+          speak("Hi there, I'm Iris. How can I help you today?");
+          
+          // Start listening
+          isListening = true;
+          initialized = true;
+          startListening();
+          
+          // Focus manual input
+          manualInput.focus();
+        }, 1000);
         
       } catch (error) {
         debug(`Initialization error: ${error.message}`);
         setStatus('Failed to initialize', 'error');
       }
     }
+    
+    // Manual input for testing
+    manualInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const userInput = manualInput.value.trim();
+        if (userInput) {
+          debug(`Manual input: "${userInput}"`);
+          processInput(userInput);
+          manualInput.value = '';
+        }
+      }
+    });
     
     // Start button click handler
     startButton.addEventListener('click', initApp);
@@ -612,12 +385,20 @@
       
       // Press 'T' to test speech
       if (e.key === 't' || e.key === 'T') {
-        debug("Test speech triggered");
-        testSpeech();
+        debug("Testing speech...");
+        speak("This is a test of Iris's voice system. Can you hear me clearly?");
+      }
+      
+      // Press 'M' to show/hide manual input
+      if (e.key === 'm' || e.key === 'M') {
+        manualInput.style.display = manualInput.style.display === 'none' ? 'block' : 'none';
+        if (manualInput.style.display === 'block') {
+          manualInput.focus();
+        }
       }
       
       // Press 'R' to restart listening
-      if (e.key === 'r' || e.key === 'R' && initialized) {
+      if ((e.key === 'r' || e.key === 'R') && initialized) {
         startListening();
       }
     });
@@ -627,12 +408,21 @@
       speak: speak,
       startListening: startListening,
       processInput: processInput,
-      init: initApp,
-      speakDialogflow: speakDialogflowResponse,
-      testSpeech: testSpeech,
-      basicSpeak: basicSpeak,
-      audioSpeak: audioSpeak
+      init: initApp
     };
+    
+    // Make sure voices are loaded before we allow initialization
+    if (window.speechSynthesis) {
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = function() {
+          // Enable the start button once voices are loaded
+          startButton.disabled = false;
+          debug("Voices loaded");
+        };
+      } else {
+        startButton.disabled = false;
+      }
+    }
   </script>
 </body>
 </html>

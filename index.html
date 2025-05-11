@@ -98,6 +98,13 @@
     <div id="debugPanel"></div>
   </div>
   <script>
+    // Check for speech synthesis support
+    console.log("Speech synthesis available:", 'speechSynthesis' in window);
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel(); // Reset any existing speech
+      console.log("Speech synthesis reset");
+    }
+    
     // Server URL - change to your actual endpoint
     const SERVER_URL = "https://irisnova-prototype.onrender.com";
     
@@ -125,10 +132,6 @@
             utterance.voice = femaleVoice;
           }
           
-          // Adjust for more feminine sound
-          utterance.pitch = 1.2;
-          utterance.rate = 1.0;
-          
           // Start speaking
           window.speechSynthesis.speak(utterance);
           return true;
@@ -140,9 +143,98 @@
         console.error("Speech synthesis error:", error);
         return false;
       }
-    } 
+    }
     
+    // Direct speech function that uses the absolutely simplest approach
+    function basicSpeak(text) {
+      try {
+        console.log("BASIC SPEAK:", text);
+        
+        // Create utterance with minimal options
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Log when speech starts and ends
+        utterance.onstart = () => console.log("BASIC SPEAK STARTED");
+        utterance.onend = () => console.log("BASIC SPEAK ENDED");
+        utterance.onerror = (e) => console.log("BASIC SPEAK ERROR:", e.error);
+        
+        // Speak immediately
+        speechSynthesis.cancel(); // Cancel any existing speech
+        speechSynthesis.speak(utterance);
+        
+        return true;
+      } catch (e) {
+        console.error("BASIC SPEAK FAILED:", e);
+        return false;
+      }
+    }
+    
+    // Test speech function for console testing
+    function testSpeech() {
+      console.log("TEST SPEECH ACTIVATED");
+      
+      try {
+        const text = "This is a basic speech test. Can you hear me now?";
+        console.log("Speaking:", text);
+        
+        // Create utterance with minimal options
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Log when speech starts and ends
+        utterance.onstart = () => console.log("SPEECH STARTED");
+        utterance.onend = () => console.log("SPEECH ENDED");
+        utterance.onerror = (e) => console.log("SPEECH ERROR:", e.error);
+        
+        // Speak immediately
+        window.speechSynthesis.cancel(); // Cancel any existing speech
+        window.speechSynthesis.speak(utterance);
+        
+        console.log("Speech initiated");
+        return true;
+      } catch (e) {
+        console.error("SPEECH TEST FAILED:", e);
+        return false;
+      }
+    }
+    
+    // Alternative speech synthesis using audio element
+    function audioSpeak(text) {
+      try {
+        console.log("AUDIO SPEAK:", text);
+        
+        // Create audio element
+        const audio = new Audio();
+        
+        // Encode text for URL (limited to short phrases due to URL length limits)
+        const encodedText = encodeURIComponent(text.substring(0, 100));
+        
+        // Set source to text-to-speech service
+        audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=${encodedText}`;
+        
+        // Add error handling
+        audio.onerror = (e) => {
+          console.error("Audio speak error:", e);
+        };
+        
+        // Play the audio
+        audio.play().then(() => {
+          console.log("Audio playback started");
+        }).catch(e => {
+          console.error("Audio playback error:", e);
+        });
+        
+        return true;
+      } catch (e) {
+        console.error("AUDIO SPEAK FAILED:", e);
+        return false;
+      }
+    }
+    
+    // Make these available globally
     window.speakDialogflowResponse = speakDialogflowResponse;
+    window.basicSpeak = basicSpeak;
+    window.testSpeech = testSpeech;
+    window.audioSpeak = audioSpeak;
     
     // DOM Elements
     const statusEl = document.getElementById('status');
@@ -324,24 +416,59 @@
         
         // Check for valid response
         if (data && data.reply) {
-          // Update transcript and speak the response
+          // Update transcript
           transcriptEl.textContent += `\nIris: ${data.reply}`;
           
-          // Try both speech methods for better reliability
-          speakDialogflowResponse(data);
+          // Try all possible approaches one after another
+          debug("Attempting speech with multiple methods");
           
-          // Set status to speaking
+          try {
+            // Method 1: Basic speak
+            debug("Trying method 1: basicSpeak");
+            basicSpeak(data.reply);
+          } catch (e) {
+            debug(`Method 1 failed: ${e.message}`);
+          }
+          
+          try {
+            // Method 2: Original DialogflowResponse
+            debug("Trying method 2: speakDialogflowResponse");
+            speakDialogflowResponse(data);
+          } catch (e) {
+            debug(`Method 2 failed: ${e.message}`);
+          }
+          
+          try {
+            // Method 3: Audio method
+            debug("Trying method 3: audioSpeak");
+            audioSpeak(data.reply);
+          } catch (e) {
+            debug(`Method 3 failed: ${e.message}`);
+          }
+          
+          // Set status
           setStatus('Iris is speaking...', 'speaking');
           
-          // Wait a reasonable time based on text length before continuing
-          await new Promise(resolve => setTimeout(resolve, data.reply.length * 90 + 1000));
+          // Wait a reasonable time
+          const waitTime = data.reply.length * 90 + 1000;
+          debug(`Waiting ${waitTime}ms for speech to complete`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          // Set status back to listening
+          setStatus('Listening...', 'listening');
         } else {
           throw new Error('Empty or invalid response from server');
         }
       } catch (error) {
         debug(`Process error: ${error.message}`);
         setStatus('Error processing request', 'error');
-        await speak("I'm sorry, I encountered an error. Please try again.");
+        
+        // Try to speak the error message
+        try {
+          basicSpeak("I'm sorry, I encountered an error. Please try again.");
+        } catch (e) {
+          debug(`Error speaking error message: ${e.message}`);
+        }
       } finally {
         // Restart listening if needed
         if (isListening && !recognition.recognizing) {
@@ -443,8 +570,19 @@
         // Welcome message
         debug("Speaking welcome message...");
         
-        // Use the speakDialogflowResponse for the welcome message
-        speakDialogflowResponse({reply: "Hi there, I'm Iris. How can I help you today?"});
+        // Try multiple speech methods for welcome message
+        try {
+          basicSpeak("Hi there, I'm Iris. How can I help you today?");
+        } catch (e) {
+          debug(`Basic speak welcome failed: ${e.message}`);
+        }
+        
+        try {
+          speakDialogflowResponse({reply: "Hi there, I'm Iris. How can I help you today?"});
+        } catch (e) {
+          debug(`Dialogflow speak welcome failed: ${e.message}`);
+        }
+        
         setStatus('Iris is speaking...', 'speaking');
         
         // Wait a moment for the speech to complete
@@ -474,7 +612,8 @@
       
       // Press 'T' to test speech
       if (e.key === 't' || e.key === 'T') {
-        speakDialogflowResponse({reply: "This is a test of Iris's voice system. Can you hear me clearly?"});
+        debug("Test speech triggered");
+        testSpeech();
       }
       
       // Press 'R' to restart listening
@@ -489,7 +628,10 @@
       startListening: startListening,
       processInput: processInput,
       init: initApp,
-      speakDialogflow: speakDialogflowResponse
+      speakDialogflow: speakDialogflowResponse,
+      testSpeech: testSpeech,
+      basicSpeak: basicSpeak,
+      audioSpeak: audioSpeak
     };
   </script>
 </body>

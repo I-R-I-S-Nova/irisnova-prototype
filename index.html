@@ -84,22 +84,6 @@
       max-width: 300px;
       display: none;
     }
-    #manualInput {
-      position: absolute;
-      bottom: 100px;
-      left: 0;
-      right: 0;
-      margin: 0 auto;
-      width: 80%;
-      max-width: 500px;
-      padding: 10px;
-      background-color: rgba(0,0,0,0.7);
-      border: 1px solid #444;
-      border-radius: 5px;
-      font-size: 16px;
-      color: white;
-      display: none;
-    }
   </style>
 </head>
 <body>
@@ -108,37 +92,31 @@
       <source src="nova-avatar-loop.mp4" type="video/mp4" />
       Your browser does not support the video tag.
     </video>
-    <div id="status">Press Start to activate Iris</div>
+    <div id="status">Loading Iris...</div>
     <div id="transcript"></div>
-    <button id="startButton">Start Iris</button>
-    <input type="text" id="manualInput" placeholder="Type your message and press Enter..." />
     <div id="debugPanel"></div>
   </div>
   
   <script>
-    // Session ID for Dialogflow
-    const sessionId = Date.now().toString();
-    
     // Server URL
     const SERVER_URL = "https://irisnova-prototype.onrender.com";
     
     // DOM Elements
     const statusEl = document.getElementById('status');
     const avatarEl = document.getElementById('avatar');
-    const startButton = document.getElementById('startButton');
     const transcriptEl = document.getElementById('transcript');
     const debugPanel = document.getElementById('debugPanel');
-    const manualInput = document.getElementById('manualInput');
     
     // Speech services
     let recognition = null;
     let isListening = false;
     let initialized = false;
+    let speechInitialized = false;
     
     // Show debug information
     function debug(message) {
       console.log(message);
-      debugPanel.style.display = 'block';
+      //debugPanel.style.display = 'block';
       debugPanel.innerHTML += message + '<br>';
       
       // Keep only the last 10 lines
@@ -155,58 +133,94 @@
       avatarEl.className = state;
     }
     
-    // Simple speech function
-    function speak(text) {
-      try {
-        debug(`Speaking: "${text}"`);
-        
-        // Cancel any ongoing speech
-        window.speechSynthesis.cancel();
-        
-        // Create utterance
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Get voices
-        const voices = window.speechSynthesis.getVoices();
-        debug(`Available voices: ${voices.length}`);
-        
-        // Try to find a female voice
-        const femaleVoice = voices.find(v => 
-          (v.name.toLowerCase().includes('female') || 
-           v.name.toLowerCase().includes('samantha')) && 
-          v.lang.includes('en')
-        );
-        
-        if (femaleVoice) {
-          debug(`Using voice: ${femaleVoice.name}`);
-          utterance.voice = femaleVoice;
-        } else {
-          debug("No female voice found, using default");
-        }
-        
-        // Set status
-        setStatus('Iris is speaking...', 'speaking');
-        
-        // Speak
-        window.speechSynthesis.speak(utterance);
-        
-        // Set up an event for when speech ends
-        utterance.onend = function() {
-          debug("Speech ended");
-          setStatus('Listening...', 'listening');
+    // Simple speech function with user activation bypass
+    function speak(text, isInitialGreeting = false) {
+      return new Promise((resolve) => {
+        try {
+          debug(`Speaking: "${text}"`);
           
-          // Restart listening if we should be listening
-          if (isListening && (!recognition || !recognition.recognizing)) {
+          // Cancel any ongoing speech
+          if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+          }
+          
+          // Create utterance
+          const utterance = new SpeechSynthesisUtterance(text);
+          
+          // Set up event handlers
+          utterance.onstart = () => {
+            debug("Speech started");
+            setStatus('Iris is speaking...', 'speaking');
+            speechInitialized = true;
+          };
+          
+          utterance.onend = () => {
+            debug("Speech ended");
+            setStatus('Listening...', 'listening');
+            resolve();
+            
+            // Start listening after greeting
+            if (isInitialGreeting && !isListening) {
+              isListening = true;
+              startListening();
+            }
+          };
+          
+          utterance.onerror = (err) => {
+            debug(`Speech error: ${err.error}`);
+            resolve();
+            
+            // Still start listening after greeting, even if speech fails
+            if (isInitialGreeting && !isListening) {
+              isListening = true;
+              startListening();
+            }
+          };
+          
+          // Get voices
+          const voices = window.speechSynthesis.getVoices();
+          
+          // Try to find a female voice
+          const femaleVoice = voices.find(v => 
+            (v.name.toLowerCase().includes('female') || 
+             v.name.toLowerCase().includes('samantha')) && 
+            v.lang.includes('en')
+          );
+          
+          if (femaleVoice) {
+            utterance.voice = femaleVoice;
+          }
+          
+          // Start speaking
+          setStatus('Iris is speaking...', 'speaking');
+          window.speechSynthesis.speak(utterance);
+          
+          // Safety timeout for cases where onend doesn't fire
+          const safetyTimeout = text.length * 90 + 2000;
+          setTimeout(() => {
+            if (window.speechSynthesis.speaking) {
+              debug(`Safety timeout reached after ${safetyTimeout}ms`);
+              resolve();
+              
+              // Start listening after greeting anyway
+              if (isInitialGreeting && !isListening) {
+                isListening = true;
+                startListening();
+              }
+            }
+          }, safetyTimeout);
+          
+        } catch (error) {
+          debug(`Speak error: ${error.message}`);
+          resolve();
+          
+          // Still start listening after greeting, even if speech fails
+          if (isInitialGreeting && !isListening) {
+            isListening = true;
             startListening();
           }
-        };
-        
-        return true;
-      } catch (error) {
-        debug(`Speak error: ${error.message}`);
-        setStatus('Listening...', 'listening');
-        return false;
-      }
+        }
+      });
     }
     
     // Process user input with Dialogflow
@@ -216,14 +230,14 @@
         transcriptEl.textContent = `You: ${userInput}`;
         setStatus('Processing...', 'processing');
         
-        // Send to server with session ID
+        // Log the input
+        debug(`Processing input: "${userInput}"`);
+        
+        // Send to server
         const response = await fetch(`${SERVER_URL}/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            query: userInput,
-            sessionId: sessionId  // Send session ID to maintain conversation
-          })
+          body: JSON.stringify({ query: userInput })
         });
         
         // Check for errors
@@ -240,15 +254,25 @@
           // Update transcript
           transcriptEl.textContent += `\nIris: ${data.reply}`;
           
-          // Try to speak
-          speak(data.reply);
+          // Speak the response
+          await speak(data.reply);
+          
+          // Restart listening if needed
+          if (isListening && !recognition.recognizing) {
+            startListening();
+          }
         } else {
           throw new Error('Empty or invalid response from server');
         }
       } catch (error) {
         debug(`Process error: ${error.message}`);
         setStatus('Error processing request', 'error');
-        speak("I'm sorry, I encountered an error. Please try again.");
+        await speak("I'm sorry, I encountered an error. Please try again.");
+        
+        // Restart listening if needed
+        if (isListening && !recognition.recognizing) {
+          startListening();
+        }
       }
     }
     
@@ -268,6 +292,7 @@
           recognition.lang = 'en-US';
           
           recognition.onstart = function() {
+            debug("Recognition started");
             recognition.recognizing = true;
             setStatus('Listening...', 'listening');
           };
@@ -284,10 +309,11 @@
             debug(`Recognition error: ${event.error}`);
             
             if (event.error === 'no-speech') {
+              debug("No speech detected, restarting...");
               setStatus('Waiting for speech...', 'listening');
               setTimeout(startListening, 1000);
             } else if (event.error === 'aborted') {
-              // Do nothing
+              debug("Recognition aborted");
             } else {
               setStatus(`Recognition error: ${event.error}`, 'error');
               setTimeout(startListening, 3000);
@@ -325,56 +351,64 @@
       }
     }
     
-    // Initialize the app
-    function initApp() {
-      try {
-        if (initialized) return;
+    // Special function to initialize speech without user interaction
+    function forceInitialGreeting() {
+      const greetingText = "Hi there, I'm Iris. How can I help you today?";
+      
+      // Update transcript with greeting
+      transcriptEl.textContent = `Iris: ${greetingText}`;
+      
+      // Try multiple methods to get speech working
+      
+      // Method 1: Basic speech synthesis
+      speak(greetingText, true)
+        .then(() => {
+          debug("Initial greeting complete");
+        })
+        .catch(err => {
+          debug(`Initial greeting error: ${err}`);
+        });
+    }
+    
+    // Speech synthesis initialization
+    function initSpeech() {
+      // Load voices
+      let voices = [];
+      
+      function loadVoices() {
+        voices = window.speechSynthesis.getVoices();
+        debug(`Loaded ${voices.length} voices`);
         
-        // Hide start button and show manual input
-        startButton.style.display = 'none';
-        manualInput.style.display = 'block';
-        
-        // Set initial status
-        setStatus('Initializing...', '');
-        
-        // Show debug panel
-        debugPanel.style.display = 'block';
-        debug("App initialized");
-        
-        // Welcome message with delay to ensure voices are loaded
-        setTimeout(() => {
-          // Speak welcome message
-          speak("Hi there, I'm Iris. How can I help you today?");
-          
-          // Start listening
-          isListening = true;
+        if (voices.length > 0) {
+          // Voices loaded, we can start the greeting
           initialized = true;
-          startListening();
-          
-          // Focus manual input
-          manualInput.focus();
-        }, 1000);
+          forceInitialGreeting();
+        }
+      }
+      
+      // First attempt - voice list might already be available
+      if (window.speechSynthesis.getVoices().length > 0) {
+        loadVoices();
+      } else {
+        // Wait for voices to load
+        window.speechSynthesis.onvoiceschanged = loadVoices;
         
-      } catch (error) {
-        debug(`Initialization error: ${error.message}`);
-        setStatus('Failed to initialize', 'error');
+        // Fallback in case onvoiceschanged doesn't fire
+        setTimeout(() => {
+          if (!initialized) {
+            debug("Voice timeout - attempting greeting anyway");
+            initialized = true;
+            forceInitialGreeting();
+          }
+        }, 1000);
       }
     }
     
-    // Manual input for testing
-    manualInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        const userInput = manualInput.value.trim();
-        if (userInput) {
-          debug(`Manual input: "${userInput}"`);
-          processInput(userInput);
-          manualInput.value = '';
-        }
-      }
+    // Start initialization on page load
+    window.addEventListener('DOMContentLoaded', function() {
+      debug("Page loaded, initializing...");
+      initSpeech();
     });
-    
-    // Start button click handler
-    startButton.addEventListener('click', initApp);
     
     // Debug keyboard shortcuts
     document.addEventListener('keydown', function(e) {
@@ -385,44 +419,27 @@
       
       // Press 'T' to test speech
       if (e.key === 't' || e.key === 'T') {
-        debug("Testing speech...");
         speak("This is a test of Iris's voice system. Can you hear me clearly?");
       }
       
-      // Press 'M' to show/hide manual input
-      if (e.key === 'm' || e.key === 'M') {
-        manualInput.style.display = manualInput.style.display === 'none' ? 'block' : 'none';
-        if (manualInput.style.display === 'block') {
-          manualInput.focus();
-        }
+      // Press 'R' to restart listening
+      if (e.key === 'r' || e.key === 'R' && initialized) {
+        startListening();
       }
       
-      // Press 'R' to restart listening
-      if ((e.key === 'r' || e.key === 'R') && initialized) {
-        startListening();
+      // Press 'G' to repeat greeting
+      if (e.key === 'g' || e.key === 'G') {
+        forceInitialGreeting();
       }
     });
     
     // Global access for console debugging
     window.debugIris = {
-      speak: speak,
+      speak: (text) => speak(text),
       startListening: startListening,
       processInput: processInput,
-      init: initApp
+      forceGreeting: forceInitialGreeting
     };
-    
-    // Make sure voices are loaded before we allow initialization
-    if (window.speechSynthesis) {
-      if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = function() {
-          // Enable the start button once voices are loaded
-          startButton.disabled = false;
-          debug("Voices loaded");
-        };
-      } else {
-        startButton.disabled = false;
-      }
-    }
   </script>
 </body>
 </html>
